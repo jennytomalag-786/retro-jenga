@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retro Jenga: ¡Que no caiga la torre!</title>
+<style>
+  :root{
+    --ok:#3fb870; --bad:#e5533d; --idea:#3d8be5; --wild:#f2b630;
+    --bg:#1b1f2a; --panel:#262b3a; --txt:#f1f3f8; --muted:#9aa3b8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+  header{display:flex;justify-content:space-between;align-items:center;padding:10px 20px;background:#12151d;flex-wrap:wrap;gap:8px}
+  header h1{font-size:1.3rem;margin:0}
+  .clock{font-variant-numeric:tabular-nums;background:var(--panel);padding:6px 12px;border-radius:8px;font-size:.95rem}
+  .clock button{margin-left:6px}
+  main{display:grid;grid-template-columns:260px 1fr 310px;gap:16px;padding:16px;max-width:1400px;margin:auto}
+  @media(max-width:1000px){main{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border-radius:12px;padding:14px}
+  .panel h2{margin:0 0 10px;font-size:1rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  button{cursor:pointer;border:0;border-radius:8px;padding:8px 14px;font-weight:600;background:#3a4157;color:var(--txt);font-size:.9rem}
+  button:hover{filter:brightness(1.2)}
+  button.primary{background:var(--idea)}
+  button.danger{background:var(--bad)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  textarea,input,select{width:100%;background:#12151d;color:var(--txt);border:1px solid #3a4157;border-radius:8px;padding:8px;font-family:inherit}
+  textarea{height:110px;resize:vertical}
+  /* Players */
+  #players{list-style:none;padding:0;margin:0 0 10px;max-height:300px;overflow:auto}
+  #players li{padding:5px 8px;border-radius:6px;font-size:.9rem}
+  #players li.current{background:var(--wild);color:#222;font-weight:700}
+  /* Center */
+  .turn{text-align:center;font-size:1.2rem;margin-bottom:6px}
+  .turn b{color:var(--wild)}
+  .controls{display:flex;gap:16px;align-items:center;justify-content:center;margin:8px 0 14px;flex-wrap:wrap}
+  .dice{width:76px;height:76px;border-radius:14px;background:#fff;color:#222;display:flex;align-items:center;justify-content:center;font-size:2.4rem;font-weight:800;box-shadow:0 6px 0 #bbb;user-select:none}
+  .dice.roll{animation:spin .15s linear infinite}
+  @keyframes spin{from{transform:rotate(0)}to{transform:rotate(90deg)}}
+  .dicelabel{min-width:200px;max-width:280px;font-size:1rem}
+  .legend{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;font-size:.8rem;margin-bottom:10px}
+  .legend span{padding:3px 10px;border-radius:20px;color:#111;font-weight:600}
+  .wob{text-align:center;margin-bottom:6px;font-size:1.05rem}
+  /* Balance meter */
+  .meter{max-width:420px;margin:0 auto 10px;text-align:center;font-size:.9rem}
+  .meterbar{height:16px;background:#12151d;border-radius:10px;overflow:hidden;margin-top:4px;border:1px solid #3a4157}
+  #riskFill{height:100%;width:0;background:var(--ok);transition:width .5s,background .5s}
+  /* Tower */
+  .stage{display:flex;justify-content:center;padding:10px 0 0;overflow:hidden}
+  #tower{display:flex;flex-direction:column-reverse;gap:3px;padding:0 14px 0;border-bottom:12px solid #6b4a2b;position:relative;width:max-content;
+    transform-origin:50% 100%;transform:rotate(var(--tilt,0deg));transition:transform .8s ease}
+  #tower.shake{animation:shake .5s}
+  @keyframes shake{0%,100%{transform:rotate(var(--tilt,0deg))}20%{transform:rotate(calc(var(--tilt,0deg) + 2.5deg))}40%{transform:rotate(calc(var(--tilt,0deg) - 2.5deg))}60%{transform:rotate(calc(var(--tilt,0deg) + 1.5deg))}80%{transform:rotate(calc(var(--tilt,0deg) - 1deg))}}
+  .level{display:flex;gap:3px;transition:transform .6s}
+  .level.alt{margin:0 -10px}
+  .block{width:92px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:.9rem;cursor:pointer;
+    box-shadow:inset 0 -4px 0 rgba(0,0,0,.25);transition:transform .6s ease,opacity .6s ease,filter .2s;color:#111}
+  .level.alt .block{filter:brightness(.88)}
+  .block.ok{background:var(--ok)} .block.bad{background:var(--bad)} .block.idea{background:var(--idea)} .block.wild{background:var(--wild)}
+  .block.locked{filter:brightness(.5) saturate(.6);cursor:not-allowed}
+  .block.hint{animation:pulse .8s infinite alternate;outline:3px solid #fff}
+  @keyframes pulse{from{transform:scale(1)}to{transform:scale(1.07)}}
+  .block.pulled{transform:translateX(160px);opacity:0;pointer-events:none}
+  .block.fall{transition:transform 1.6s cubic-bezier(.5,0,1,.6),opacity 1.6s}
+  .towernote{text-align:center;font-size:.8rem;color:var(--muted);margin-top:8px}
+  /* Modals */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:10;padding:16px}
+  .modal.show{display:flex}
+  .card{background:#fff;color:#222;border-radius:18px;max-width:560px;width:100%;padding:26px;text-align:center;border-top:14px solid var(--wild)}
+  .card h3{margin:0 0 6px;font-size:1.1rem}
+  .card .q{font-size:1.5rem;font-weight:700;margin:12px 0 18px}
+  .timer{font-size:3.2rem;font-weight:800;font-variant-numeric:tabular-nums}
+  .timer.low{color:var(--bad);animation:pulse .5s infinite alternate}
+  .bar{height:10px;background:#ddd;border-radius:6px;overflow:hidden;margin:8px 0 16px}
+  .bar div{height:100%;background:var(--ok);width:100%;transition:width 1s linear}
+  .card .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .card input{margin-top:12px;color:#222;background:#f3f3f3;border-color:#ccc}
+  /* Actions list */
+  #actions{list-style:none;padding:0;margin:8px 0}
+  #actions li{background:#12151d;border-radius:6px;padding:6px 8px;margin-bottom:6px;font-size:.88rem}
+  .small{font-size:.8rem;color:var(--muted)}
+  #fallmsg{display:none;text-align:center;background:var(--bad);border-radius:12px;padding:14px;margin-bottom:10px}
+  #fallmsg.show{display:block}
+  .stat{display:flex;justify-content:space-between;font-size:.9rem;padding:2px 0}
+  /* Voting */
+  .vbox{background:var(--panel);border-radius:18px;max-width:720px;width:100%;max-height:92vh;overflow:auto;padding:22px}
+  .vbox h3{margin:0 0 10px}
+  .vtop{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .vtop select{width:auto;min-width:160px}
+  .dotsleft{font-size:1.1rem}
+  .dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--wild);margin-right:3px;vertical-align:middle}
+  .dot.empty{background:#12151d;border:2px solid #3a4157}
+  .vrow{display:flex;align-items:center;gap:10px;background:#12151d;border-radius:8px;padding:8px 10px;margin-bottom:8px}
+  .vrow .txt{flex:1;font-size:.95rem}
+  .vrow .mine{min-width:70px;text-align:center}
+  .vrow .total{min-width:90px;text-align:right}
+  .vrow.top{outline:2px solid var(--wild);background:#33301f}
+  .vrow button{padding:4px 12px}
+  .vadd{display:flex;gap:8px;margin-top:10px}
+  .vadd input{flex:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>🧱 Retro Jenga: ¡Que no caiga la torre!</h1>
+  <div class="clock">⏱ Sesión: <span id="sessClock">60:00</span>
+    <button id="sessBtn">Iniciar</button></div>
+</header>
+
+<main>
+  <!-- Left: players -->
+  <section class="panel">
+    <h2>👥 Equipo</h2>
+    <ul id="players"></ul>
+    <details>
+      <summary class="small">Editar nombres (uno por línea)</summary>
+      <textarea id="namesArea"></textarea>
+      <button id="saveNames" style="margin-top:6px;width:100%">Guardar</button>
+    </details>
+    <h2 style="margin-top:14px">⚙️ Ajustes</h2>
+    <label class="small">Tiempo por turno</label>
+    <select id="turnTime">
+      <option value="45">45 s</option>
+      <option value="60" selected>60 s</option>
+      <option value="90">90 s</option>
+      <option value="120">120 s</option>
+    </select>
+    <label class="small" style="display:block;margin-top:8px">Tambaleos (tiempo agotado) para que caiga</label>
+    <select id="maxWob">
+      <option value="3" selected>3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+    </select>
+    <label class="small" style="display:block;margin-top:8px">Sensibilidad al desequilibrio</label>
+    <select id="sens">
+      <option value="5">Fácil</option>
+      <option value="3.5" selected>Normal</option>
+      <option value="2.5">Difícil</option>
+    </select>
+  </section>
+
+  <!-- Center: tower -->
+  <section class="panel">
+    <div id="fallmsg">
+      <b id="fallTitle">💥 ¡LA TORRE SE HA CAÍDO!</b><br>
+      Es el momento de convertir lo aprendido en un plan de acción.<br>
+      <button class="primary" id="goVote" style="margin-top:8px">🗳 Ir a la votación</button>
+    </div>
+    <div class="turn">Turno de: <b id="curName">-</b></div>
+    <div class="controls">
+      <div class="dice" id="dice">🎲</div>
+      <div class="dicelabel" id="diceLabel">Pulsa «Tirar dado» para saber qué tipo de bloque sacar</div>
+      <button class="primary" id="rollBtn">🎲 Tirar dado</button>
+      <button id="randomBtn" disabled>🎯 Bloque al azar</button>
+    </div>
+    <div class="legend">
+      <span style="background:var(--ok)">🟢 1-2 Lo que funcionó</span>
+      <span style="background:var(--bad)">🔴 3-4 Lo que nos tambalea</span>
+      <span style="background:var(--idea)">🔵 5 Experimento / idea</span>
+      <span style="background:var(--wild)">🟡 6 Comodín</span>
+    </div>
+    <div class="wob">Tambaleos: <span id="wobIcons"></span></div>
+    <div class="meter">
+      Equilibrio de la torre: <b id="riskTxt">Estable</b>
+      <div class="meterbar"><div id="riskFill"></div></div>
+      <div class="small" id="leanTxt"></div>
+    </div>
+    <div class="stage"><div id="tower"></div></div>
+    <div class="towernote">🔒 Las 3 filas de abajo y la de arriba no se pueden mover. Pasa el ratón sobre un bloque para ver el riesgo si lo sacas.</div>
+    <div style="text-align:center;margin-top:14px">
+      <button class="danger" id="resetBtn">🔄 Reconstruir torre</button>
+    </div>
+  </section>
+
+  <!-- Right: actions -->
+  <section class="panel">
+    <h2>📊 Marcador</h2>
+    <div class="stat"><span>🟢 Funcionó</span><b id="cOk">0</b></div>
+    <div class="stat"><span>🔴 Tambalea</span><b id="cBad">0</b></div>
+    <div class="stat"><span>🔵 Ideas</span><b id="cIdea">0</b></div>
+    <div class="stat"><span>🟡 Comodines</span><b id="cWild">0</b></div>
+    <h2 style="margin-top:14px">✅ Acciones para el Sprint</h2>
+    <ul id="actions"></ul>
+    <p class="small" id="noActions">Las acciones que se anoten al sacar bloques aparecerán aquí.</p>
+    <button class="primary" id="voteBtn" style="width:100%;margin-bottom:6px">🗳 Votación con puntos</button>
+    <button id="copyBtn" style="width:100%;margin-bottom:6px">📋 Copiar acciones</button>
+    <button id="clearBtn" style="width:100%">🗑 Borrar acciones y votos</button>
+    <h2 style="margin-top:14px">📖 Cómo se juega</h2>
+    <ol class="small" style="padding-left:18px;margin:0">
+      <li>Quien tenga el turno tira el dado.</li>
+      <li>Saca un bloque del color indicado (parpadean).</li>
+      <li>Responde la carta antes de que acabe el tiempo.</li>
+      <li>Si se agota el tiempo, la torre tambalea.</li>
+      <li>Si queda muy desequilibrada, se cae.</li>
+      <li>Al caer, vota las acciones con puntos.</li>
+    </ol>
+  </section>
+</main>
+
+<!-- Card modal -->
+<div class="modal" id="modal">
+  <div class="card" id="card">
+    <h3 id="cardCat"></h3>
+    <div class="q" id="cardQ"></div>
+    <div class="timer" id="timer">01:00</div>
+    <div class="bar"><div id="barFill"></div></div>
+    <div class="row">
+      <button id="pauseBtn">⏸ Pausar</button>
+      <button id="plusBtn">+30 s</button>
+      <button class="primary" id="doneBtn">✔ Respondido</button>
+      <button class="danger" id="skipBtn">⏰ Sin tiempo</button>
+    </div>
+    <input id="actionInput" placeholder="(Opcional) Escribe una acción concreta que salga de esta carta">
+    <button id="addAction" style="margin-top:8px">➕ Añadir acción</button>
+  </div>
+</div>
+
+<!-- Voting modal -->
+<div class="modal" id="voteModal">
+  <div class="vbox">
+    <h3>🗳 Votación con puntos</h3>
+    <p class="small" style="margin-top:0">Votación a ciegas: los totales se ven solo al revelar. Cada persona reparte sus puntos como quiera, incluso todos en una acción.</p>
+    <div class="vtop">
+      <label>Vota:</label>
+      <select id="voterSel"></select>
+      <button id="nextVoter">Siguiente ➡</button>
+      <label>Puntos por persona:</label>
+      <select id="dotsPer" style="width:auto">
+        <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option>
+      </select>
+    </div>
+    <div class="dotsleft" id="dotsLeft"></div>
+    <div class="small" id="voteProgress" style="margin:4px 0 10px"></div>
+    <div id="voteList"></div>
+    <div class="vadd">
+      <input id="voteNewAction" placeholder="Añadir otra acción a votar...">
+      <button id="voteAddBtn">➕</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button class="primary" id="revealBtn">🏆 Revelar resultados</button>
+      <button id="copyVotes">📋 Copiar top 3</button>
+      <button id="resetVotes">↺ Reiniciar votos</button>
+      <button id="closeVote" style="margin-left:auto">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CATS = {
+  ok:{name:'🟢 Lo que funcionó',color:'#3fb870',prompts:[
+    'Cuenta algo que salió genial este Sprint y a quién se lo agradeces.',
+    '¿Qué práctica del equipo deberíamos proteger a toda costa?',
+    'Nombra un momento del Sprint en el que te sentiste orgulloso/a.',
+    '¿Qué compañero/a te ayudó cuando lo necesitabas? Cuéntalo.',
+    '¿Qué ceremonia fue realmente útil y por qué?',
+    '¿Qué herramienta te hizo la vida más fácil?',
+    '¿Qué aprendiste que no sabías hace dos semanas?',
+    '¿Cuál fue la mejor decisión que tomó el equipo?',
+    'Describe nuestro Sprint con una película y explica por qué.',
+    '¿Qué pequeño éxito pasó desapercibido y merece aplauso?'
+  ]},
+  bad:{name:'🔴 Lo que nos tambalea',color:'#e5533d',prompts:[
+    '¿Qué te quitó más tiempo del que debía? Sin culpar a personas.',
+    '¿Qué reunión cambiarías, acortarías o eliminarías?',
+    '¿Dónde hubo más cambios de prioridad de lo sano?',
+    '¿Qué deuda técnica nos está pasando factura?',
+    '¿Qué información te faltó para trabajar mejor?',
+    '¿Qué nos frenó entre «terminado» y «en producción»?',
+    '¿Qué bloqueo tardó demasiado en resolverse?',
+    '¿Qué tarea estuvo mal definida o con criterios poco claros?',
+    '¿Qué es lo que todos sabemos pero nadie dice en voz alta?',
+    'Si el Sprint fuera una serie de terror, ¿cuál sería el momento más aterrador?'
+  ]},
+  idea:{name:'🔵 Experimento / idea',color:'#3d8be5',prompts:[
+    'Propón un experimento de 1 Sprint para mejorar la Daily.',
+    'Si pudieras cambiar UNA regla del equipo, ¿cuál sería?',
+    '¿Qué empezarías a hacer mañana mismo (Start)?',
+    '¿Qué dejarías de hacer ya (Stop)?',
+    '¿Qué deberíamos seguir haciendo pero más (More of)?',
+    'Propón una forma de reducir interrupciones.',
+    '¿Cómo mejorarías el refinamiento del backlog?',
+    '¿Qué automatizarías primero?',
+    'Diseña una mejora de comunicación que cueste menos de 10 minutos al día.',
+    'Si tuvieras una varita mágica, ¿qué arreglarías en el proceso?'
+  ]},
+  wild:{name:'🟡 Comodín',color:'#f2b630',prompts:[
+    '🎭 Reto: explica el Sprint en 30 segundos usando solo emojis (di cuáles).',
+    '🎁 Reconoce públicamente a alguien del equipo con una frase concreta.',
+    '🔮 Predice: ¿cuál será el mayor riesgo del próximo Sprint?',
+    '🎤 Describe tu rol en el Sprint como si fuera un comentarista deportivo.',
+    '🐶 Si el equipo fuera una manada de animales, ¿qué animal eres tú y por qué?',
+    '☕ Di cuál ha sido tu mejor excusa o frase de reunión del Sprint.',
+    '🚀 Elige a alguien para que continúe con tu turno y explica por qué.',
+    '😂 Cuenta el momento más gracioso del Sprint.',
+    '🎬 Ponle título de película al próximo Sprint.',
+    '🤝 Pide una ayuda concreta al equipo para la próxima semana.'
+  ]}
+};
+const LEVELS = 18;   // niveles totales
+const BASE = 3;      // filas de abajo bloqueadas (la fila superior también)
+const STORE_KEY = 'retroJengaStore';
+
+let state, grid=[], levelEls=[];
+let store = loadStore();       // acciones y votos (persisten al reconstruir la torre)
+let timerId=null, timeLeft=0, totalTime=0, paused=false, curBlock=null;
+let sessId=null, sessLeft=3600;
+let voterIdx=0, revealed=false;
+
+const $=id=>document.getElementById(id);
+
+/* ---------- Persistencia ---------- */
+function loadStore(){
+  try{const s=JSON.parse(localStorage.getItem(STORE_KEY));if(s&&Array.isArray(s.actions))return {actions:s.actions,votes:s.votes||{}}}catch(e){}
+  return {actions:[],votes:{}};
+}
+function saveStore(){try{localStorage.setItem(STORE_KEY,JSON.stringify(store))}catch(e){}}
+
+function defaultNames(){return Array.from({length:15},(_,i)=>'Persona '+(i+1)).join('\n')}
+
+function init(){
+  const saved = localStorage.getItem('retroJengaNames');
+  $('namesArea').value = saved || defaultNames();
+  state={
+    players:$('namesArea').value.split('\n').map(s=>s.trim()).filter(Boolean),
+    turn:0, wob:0, fallen:false, rolledCat:null, counts:{ok:0,bad:0,idea:0,wild:0},
+    used:{ok:[],bad:[],idea:[],wild:[]}
+  };
+  if(!state.players.length) state.players=['Persona 1'];
+  renderPlayers(); buildTower(); renderWob(); updateScore(); renderActions(); updateMeter();
+  $('fallmsg').classList.remove('show');
+  $('diceLabel').textContent='Pulsa «Tirar dado» para saber qué tipo de bloque sacar';
+  $('dice').textContent='🎲';
+  $('rollBtn').disabled=false; $('randomBtn').disabled=true;
+}
+
+function renderPlayers(){
+  const ul=$('players'); ul.innerHTML='';
+  state.players.forEach((p,i)=>{
+    const li=document.createElement('li');
+    li.textContent=p;
+    if(i===state.turn%state.players.length) li.classList.add('current');
+    ul.appendChild(li);
+  });
+  $('curName').textContent=state.players[state.turn%state.players.length]||'-';
+}
+
+/* ---------- Torre ---------- */
+function buildTower(){
+  const t=$('tower'); t.innerHTML=''; grid=[]; levelEls=[];
+  const keys=['ok','ok','bad','bad','idea','wild'];
+  for(let l=0;l<LEVELS;l++){
+    const lv=document.createElement('div');
+    lv.className='level'+(l%2?' alt':'');
+    const row=[];
+    for(let b=0;b<3;b++){
+      const cat=keys[Math.floor(Math.random()*keys.length)];
+      const el=document.createElement('div');
+      el.className='block '+cat;
+      const obj={el,cat,level:l,pos:b,removed:false};
+      const locked=l<BASE||l===LEVELS-1;
+      if(locked){el.classList.add('locked');el.textContent='🔒'}
+      else el.textContent={ok:'🟢',bad:'🔴',idea:'💡',wild:'⭐'}[cat];
+      el.onclick=()=>pullBlock(obj);
+      el.onmouseenter=()=>{
+        if(canPull(obj)&&!curBlock&&!state.fallen){
+          el.title='Riesgo de la torre si lo sacas: '+Math.round(Math.min(1.5,calcRisk(obj).risk)*100)+'%';
+        } else if(locked) el.title='Bloque fijo: no se puede mover';
+        else el.title='';
+      };
+      lv.appendChild(el); row.push(obj);
+    }
+    t.appendChild(lv); grid.push(row); levelEls.push(lv);
+  }
+}
+
+function canPull(o){
+  if(o.removed) return false;
+  if(o.level<BASE||o.level===LEVELS-1) return false;
+  return grid[o.level].filter(b=>!b.removed).length>=2;   // no se puede vaciar un nivel
+}
+function allPullable(){return grid.flat().filter(canPull)}
+
+/* ---------- Equilibrio (modelo tipo Jenga) ----------
+   Cada nivel tiene 3 posiciones (-1, 0, +1). Si quedan solo bloques de un lado, el
+   nivel desplaza el centro de masa. Los niveles pares y los impares van en ejes
+   perpendiculares (como en el Jenga real). Los niveles bajos pesan más. Un nivel con
+   un solo bloque es frágil y suma riesgo extra. */
+function sens(){return +$('sens').value}
+function calcRisk(skip){
+  const S=[0,0]; let singles=0;
+  for(let l=0;l<LEVELS;l++){
+    const rem=grid[l].filter(b=>!b.removed&&b!==skip);
+    if(!rem.length) continue;
+    const off=rem.reduce((a,b)=>a+(b.pos-1),0)/rem.length;
+    const w=1+(LEVELS-1-l)/(LEVELS-1);
+    S[l%2]+=off*w;
+    if(rem.length===1) singles++;
+  }
+  const risk=Math.max(Math.abs(S[0]),Math.abs(S[1]))/sens()+0.08*singles+0.08*(state?state.wob:0);
+  return {risk,S};
+}
+
+function updateMeter(){
+  if(!grid.length) return;
+  const {risk,S}=calcRisk();
+  const pct=Math.min(100,risk*100);
+  const f=$('riskFill'); f.style.width=pct+'%';
+  let txt='Estable 😌',col='#3fb870';
+  if(risk>=.85){txt='¡CRÍTICO! 🫨';col='#e5533d'}
+  else if(risk>=.6){txt='¡Peligro! 😰';col='#f08a3c'}
+  else if(risk>=.3){txt='Algo inestable 😬';col='#f2b630'}
+  f.style.background=col; $('riskTxt').textContent=txt+' ('+Math.round(pct)+'%)';
+  const lean=[];
+  if(S[0]>.5) lean.push('derecha'); else if(S[0]<-.5) lean.push('izquierda');
+  if(S[1]>.5) lean.push('atrás'); else if(S[1]<-.5) lean.push('adelante');
+  $('leanTxt').textContent=lean.length?'Se inclina hacia: '+lean.join(' y '):'';
+  const tilt=Math.max(-6,Math.min(6,S[0]/sens()*5));
+  $('tower').style.setProperty('--tilt',tilt.toFixed(2)+'deg');
+  // desplazamiento visual de cada nivel hacia su lado más pesado
+  grid.forEach((row,l)=>{
+    const rem=row.filter(b=>!b.removed);
+    const off=rem.length?rem.reduce((a,b)=>a+(b.pos-1),0)/rem.length:0;
+    levelEls[l].style.transform='translateX('+(off*5).toFixed(1)+'px)';
+  });
+}
+
+function renderWob(){
+  const max=+$('maxWob').value;
+  $('wobIcons').textContent=Array.from({length:max},(_,i)=>i<state.wob?'💥':'⚪').join(' ');
+}
+function updateScore(){
+  $('cOk').textContent=state.counts.ok;$('cBad').textContent=state.counts.bad;
+  $('cIdea').textContent=state.counts.idea;$('cWild').textContent=state.counts.wild;
+}
+function renderActions(){
+  const ul=$('actions'); ul.innerHTML='';
+  store.actions.forEach(a=>{const li=document.createElement('li');li.textContent='• '+a;ul.appendChild(li)});
+  $('noActions').style.display=store.actions.length?'none':'block';
+}
+
+/* ---------- Dado ---------- */
+function rollDice(){
+  if(state.fallen||curBlock) return;
+  clearHints();
+  const pullable=allPullable();
+  if(!pullable.length){ collapse('sinbloques'); return; }
+  const d=$('dice'); d.classList.add('roll'); $('rollBtn').disabled=true;
+  let n=0;
+  const iv=setInterval(()=>{d.textContent=1+Math.floor(Math.random()*6);n++;
+    if(n>10){clearInterval(iv);d.classList.remove('roll');
+      const v=1+Math.floor(Math.random()*6); d.textContent=v;
+      const cat=v<=2?'ok':v<=4?'bad':v===5?'idea':'wild';
+      state.rolledCat=cat;
+      const ofCat=pullable.filter(b=>b.cat===cat);
+      const hints=ofCat.length?ofCat:pullable;
+      hints.forEach(b=>b.el.classList.add('hint'));
+      $('diceLabel').innerHTML='Sacó <b>'+v+'</b>: '+CATS[cat].name+(ofCat.length?'<br>Haz clic en un bloque que parpadea.':'<br>No quedan de ese color: elige cualquiera.');
+      $('randomBtn').disabled=false;
+      beep(520,.1);
+    }},90);
+}
+function clearHints(){document.querySelectorAll('.block.hint').forEach(b=>b.classList.remove('hint'))}
+
+function randomBlock(){
+  const c=[...document.querySelectorAll('.block.hint')];
+  if(!c.length) return;
+  const el=c[Math.floor(Math.random()*c.length)];
+  const obj=grid.flat().find(b=>b.el===el);
+  pullBlock(obj);
+}
+
+/* ---------- Sacar bloque ---------- */
+function pullBlock(o){
+  if(state.fallen||curBlock) return;
+  if(o.level<BASE||o.level===LEVELS-1){ $('diceLabel').textContent='🔒 Ese bloque está fijo (base o cima). Elige otro.'; return; }
+  if(!state.rolledCat){ $('diceLabel').textContent='¡Primero tira el dado! 🎲'; return; }
+  if(!canPull(o)){ $('diceLabel').textContent='Ese es el último bloque de su nivel y no se puede sacar.'; return; }
+  if(!o.el.classList.contains('hint')){ $('diceLabel').textContent='Saca uno de los bloques que parpadean.'; return; }
+  curBlock=o; o.removed=true; o.el.classList.add('pulled'); clearHints();
+  state.counts[o.cat]++; updateScore();
+  updateMeter();
+  openCard(o.cat);
+}
+
+function pickPrompt(cat){
+  const all=CATS[cat].prompts;
+  let avail=all.map((_,i)=>i).filter(i=>!state.used[cat].includes(i));
+  if(!avail.length){state.used[cat]=[];avail=all.map((_,i)=>i)}
+  const i=avail[Math.floor(Math.random()*avail.length)];
+  state.used[cat].push(i);
+  return all[i];
+}
+
+function openCard(cat){
+  $('cardCat').textContent=CATS[cat].name+' · '+state.players[state.turn%state.players.length];
+  $('card').style.borderTopColor=CATS[cat].color;
+  $('cardQ').textContent=pickPrompt(cat);
+  $('actionInput').value='';
+  totalTime=timeLeft=+$('turnTime').value; paused=false;
+  $('pauseBtn').textContent='⏸ Pausar';
+  $('modal').classList.add('show');
+  drawTimer();
+  clearInterval(timerId);
+  timerId=setInterval(()=>{
+    if(paused) return;
+    timeLeft--; drawTimer();
+    if(timeLeft<=10&&timeLeft>0) beep(800,.05);
+    if(timeLeft<=0){ finishTurn(false); }
+  },1000);
+}
+
+function drawTimer(){
+  const m=String(Math.floor(timeLeft/60)).padStart(2,'0'),s=String(Math.max(timeLeft,0)%60).padStart(2,'0');
+  $('timer').textContent=m+':'+s;
+  $('timer').classList.toggle('low',timeLeft<=10);
+  $('barFill').style.width=Math.max(0,timeLeft/totalTime*100)+'%';
+  $('barFill').style.background=timeLeft<=10?'#e5533d':'#3fb870';
+}
+
+function shakeTower(){
+  const t=$('tower'); t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake');
+}
+
+function finishTurn(success){
+  clearInterval(timerId);
+  $('modal').classList.remove('show');
+  curBlock=null; state.rolledCat=null;
+  let msg=success?'¡Bien! Siguiente persona, tira el dado.':'⏰ ¡Se acabó el tiempo! Siguiente persona, tira el dado.';
+  if(!success){ state.wob++; renderWob(); shakeTower(); beep(200,.4); }
+  updateMeter();
+  // ¿Se cae la torre?
+  const {risk}=calcRisk();
+  let reason=null;
+  if(state.wob>=+$('maxWob').value) reason='tambaleos';
+  else if(risk>=1) reason='desequilibrio';
+  else if(risk>.6 && Math.random()<(risk-.6)/.4*.4) reason='azar';
+  if(reason){ collapse(reason); return; }
+  if(risk>.6){ shakeTower(); beep(260,.25); msg='😬 ¡La torre cruje! Está muy inestable. '+msg; }
+  state.turn++; renderPlayers();
+  $('rollBtn').disabled=false; $('randomBtn').disabled=true;
+  $('dice').textContent='🎲';
+  $('diceLabel').textContent=msg;
+}
+
+const FALL_TEXT={
+  desequilibrio:'💥 ¡LA TORRE PERDIÓ EL EQUILIBRIO Y SE CAYÓ!',
+  azar:'💥 ¡LA TORRE NO AGUANTÓ EL ÚLTIMO MOVIMIENTO!',
+  tambaleos:'💥 ¡DEMASIADOS TAMBALEOS: LA TORRE SE CAYÓ!',
+  sinbloques:'🏁 ¡NO QUEDAN BLOQUES SEGUROS! LA TORRE SE DERRUMBA'
+};
+function collapse(reason){
+  state.fallen=true; clearHints();
+  grid.flat().forEach(o=>{
+    const b=o.el;
+    b.classList.add('fall');
+    const x=(Math.random()-.5)*600, y=200+Math.random()*80, r=(Math.random()-.5)*540;
+    b.style.transform='translate('+x+'px,'+y+'px) rotate('+r+'deg)';
+    b.style.opacity='.85';
+  });
+  $('tower').style.setProperty('--tilt','0deg');
+  $('fallTitle').textContent=FALL_TEXT[reason]||FALL_TEXT.desequilibrio;
+  $('fallmsg').classList.add('show');
+  $('rollBtn').disabled=true; $('randomBtn').disabled=true;
+  $('diceLabel').textContent='💥 Torre caída. ¡A votar las acciones!';
+  beep(120,.8);
+  setTimeout(openVote,2200);
+}
+
+/* ---------- Sonido ---------- */
+function beep(f,d){
+  try{
+    const a=new (window.AudioContext||window.webkitAudioContext)();
+    const o=a.createOscillator(),g=a.createGain();
+    o.frequency.value=f;o.connect(g);g.connect(a.destination);g.gain.value=.08;
+    o.start();o.stop(a.currentTime+d);
+  }catch(e){}
+}
+
+/* ---------- Reloj de sesión ---------- */
+function drawSess(){
+  const m=String(Math.floor(sessLeft/60)).padStart(2,'0'),s=String(sessLeft%60).padStart(2,'0');
+  $('sessClock').textContent=m+':'+s;
+}
+$('sessBtn').onclick=()=>{
+  if(sessId){clearInterval(sessId);sessId=null;$('sessBtn').textContent='Reanudar';return}
+  $('sessBtn').textContent='Pausar';
+  sessId=setInterval(()=>{sessLeft=Math.max(0,sessLeft-1);drawSess();if(sessLeft===0){clearInterval(sessId);beep(440,.6)}},1000);
+};
+
+/* ---------- Votación con puntos ---------- */
+function dotsPer(){return +$('dotsPer').value}
+function usedBy(v){return Object.values(store.votes[v]||{}).reduce((a,b)=>a+b,0)}
+function totalFor(i){return Object.values(store.votes).reduce((a,v)=>a+(v[i]||0),0)}
+
+function openVote(){ revealed=false; renderVote(true); $('voteModal').classList.add('show'); }
+
+function renderVote(rebuildVoters){
+  if(rebuildVoters){
+    const sel=$('voterSel'); sel.innerHTML='';
+    state.players.forEach((p,i)=>{const o=document.createElement('option');o.value=i;o.textContent=p;sel.appendChild(o)});
+    if(voterIdx>=state.players.length) voterIdx=0;
+    sel.value=voterIdx;
+  }
+  const left=dotsPer()-usedBy(voterIdx);
+  const dl=$('dotsLeft'); dl.innerHTML='Puntos disponibles: ';
+  for(let i=0;i<dotsPer();i++){const s=document.createElement('span');s.className='dot'+(i<left?'':' empty');dl.appendChild(s)}
+  const voted=state.players.filter((_,i)=>usedBy(i)>0).length;
+  $('voteProgress').textContent='Han votado '+voted+' de '+state.players.length+' personas.';
+
+  const list=$('voteList'); list.innerHTML='';
+  if(!store.actions.length){ list.innerHTML='<p class="small">Todavía no hay acciones. Añade alguna abajo.</p>'; return; }
+  let order=store.actions.map((a,i)=>i);
+  let topSet=new Set();
+  if(revealed){
+    order.sort((x,y)=>totalFor(y)-totalFor(x));
+    order.filter(i=>totalFor(i)>0).slice(0,3).forEach(i=>topSet.add(i));
+  }
+  order.forEach(i=>{
+    const mine=(store.votes[voterIdx]||{})[i]||0;
+    const row=document.createElement('div'); row.className='vrow'+(topSet.has(i)?' top':'');
+    const txt=document.createElement('div'); txt.className='txt'; txt.textContent=(topSet.has(i)?'🏆 ':'')+store.actions[i];
+    const minus=document.createElement('button'); minus.textContent='−'; minus.disabled=mine<=0||revealed;
+    minus.onclick=()=>vote(i,-1);
+    const m=document.createElement('div'); m.className='mine';
+    for(let k=0;k<mine;k++){const s=document.createElement('span');s.className='dot';m.appendChild(s)}
+    if(!mine) m.textContent='·';
+    const plus=document.createElement('button'); plus.textContent='+'; plus.disabled=left<=0||revealed;
+    plus.onclick=()=>vote(i,1);
+    row.append(txt,minus,m,plus);
+    if(revealed){const t=document.createElement('div');t.className='total';t.innerHTML='<b>'+totalFor(i)+'</b> pts';row.appendChild(t)}
+    list.appendChild(row);
+  });
+}
+
+function vote(i,delta){
+  const cur=(store.votes[voterIdx]=store.votes[voterIdx]||{});
+  const now=(cur[i]||0)+delta;
+  if(now<0) return;
+  if(delta>0&&usedBy(voterIdx)>=dotsPer()) return;
+  cur[i]=now; if(!now) delete cur[i];
+  saveStore(); renderVote(false);
+}
+
+function topResults(){
+  return store.actions.map((a,i)=>({a,pts:totalFor(i)})).filter(x=>x.pts>0).sort((x,y)=>y.pts-x.pts).slice(0,3);
+}
+
+$('voteBtn').onclick=openVote;
+$('goVote').onclick=openVote;
+$('closeVote').onclick=()=>$('voteModal').classList.remove('show');
+$('voterSel').onchange=e=>{voterIdx=+e.target.value;renderVote(false)};
+$('nextVoter').onclick=()=>{voterIdx=(voterIdx+1)%state.players.length;$('voterSel').value=voterIdx;renderVote(false)};
+$('dotsPer').onchange=()=>renderVote(false);
+$('revealBtn').onclick=()=>{revealed=!revealed;$('revealBtn').textContent=revealed?'🙈 Ocultar resultados':'🏆 Revelar resultados';renderVote(false);if(revealed)beep(660,.3)};
+$('resetVotes').onclick=()=>{if(confirm('¿Reiniciar todos los votos?')){store.votes={};saveStore();revealed=false;renderVote(false)}};
+$('voteAddBtn').onclick=()=>{
+  const v=$('voteNewAction').value.trim();
+  if(v){store.actions.push(v);saveStore();$('voteNewAction').value='';renderActions();renderVote(false)}
+};
+$('voteNewAction').addEventListener('keydown',e=>{if(e.key==='Enter')$('voteAddBtn').click()});
+$('copyVotes').onclick=()=>{
+  const r=topResults();
+  const t='Top acciones de la retro:\n'+(r.length?r.map((x,i)=>(i+1)+'. '+x.a+' ('+x.pts+' pts)').join('\n'):'(sin votos)');
+  navigator.clipboard.writeText(t).then(()=>{$('copyVotes').textContent='✅ Copiado';setTimeout(()=>$('copyVotes').textContent='📋 Copiar top 3',1500)});
+};
+
+/* ---------- Eventos generales ---------- */
+$('rollBtn').onclick=rollDice;
+$('randomBtn').onclick=randomBlock;
+$('doneBtn').onclick=()=>finishTurn(true);
+$('skipBtn').onclick=()=>finishTurn(false);
+$('pauseBtn').onclick=()=>{paused=!paused;$('pauseBtn').textContent=paused?'▶ Reanudar':'⏸ Pausar'};
+$('plusBtn').onclick=()=>{timeLeft+=30;totalTime=Math.max(totalTime,timeLeft);drawTimer()};
+$('addAction').onclick=()=>{
+  const v=$('actionInput').value.trim();
+  if(v){store.actions.push(v);saveStore();renderActions();$('actionInput').value=''}
+};
+$('actionInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('addAction').click()});
+$('resetBtn').onclick=()=>{ if(confirm('¿Reconstruir la torre? Se conservan las acciones y los votos.')) init(); };
+$('clearBtn').onclick=()=>{ if(confirm('¿Borrar todas las acciones y votos?')){store={actions:[],votes:{}};saveStore();renderActions();} };
+$('saveNames').onclick=()=>{
+  localStorage.setItem('retroJengaNames',$('namesArea').value);
+  state.players=$('namesArea').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!state.players.length) state.players=['Persona 1'];
+  state.turn=0; renderPlayers();
+};
+$('maxWob').onchange=renderWob;
+$('sens').onchange=updateMeter;
+$('copyBtn').onclick=()=>{
+  const t='Acciones de la retro:\n'+store.actions.map((a,i)=>(i+1)+'. '+a).join('\n');
+  navigator.clipboard.writeText(t).then(()=>{$('copyBtn').textContent='✅ Copiado';setTimeout(()=>$('copyBtn').textContent='📋 Copiar acciones',1500)});
+};
+
+drawSess(); init();
+</script>
+</body>
+</html>
