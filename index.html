@@ -166,7 +166,9 @@
       <div class="small" id="leanTxt"></div>
     </div>
     <div class="stage"><div id="tower"></div></div>
-    <div class="towernote">🔒 Las 3 filas de abajo y la de arriba no se pueden mover. Pasa el ratón sobre un bloque para ver el riesgo si lo sacas.</div>
+    <div class="towernote">🔒 Las 3 filas de arriba no se pueden mover.<br>
+      💥 La torre cae al instante si: (1) sacaron el del medio de una fila y sacan uno de sus lados, (2) sacaron los 2 extremos de una fila y sacan el del medio, (3) sacan dos bloques de la misma columna en filas contiguas.<br>
+      Pasa el ratón sobre un bloque para ver el riesgo o el aviso.</div>
     <div style="text-align:center;margin-top:14px">
       <button class="danger" id="resetBtn">🔄 Reconstruir torre</button>
     </div>
@@ -191,7 +193,8 @@
       <li>Saca un bloque del color indicado (parpadean).</li>
       <li>Responde la carta antes de que acabe el tiempo.</li>
       <li>Si se agota el tiempo, la torre tambalea.</li>
-      <li>Si queda muy desequilibrada, se cae.</li>
+      <li>Si rompes una regla de fila o columna, se cae al instante.</li>
+      <li>Si queda muy desequilibrada, también se cae.</li>
       <li>Al caer, vota las acciones con puntos.</li>
     </ol>
   </section>
@@ -297,7 +300,7 @@ const CATS = {
   ]}
 };
 const LEVELS = 18;   // niveles totales
-const BASE = 3;      // filas de abajo bloqueadas (la fila superior también)
+const TOP_LOCK = 3;  // las 3 filas de arriba están bloqueadas
 const STORE_KEY = 'retroJengaStore';
 
 let state, grid=[], levelEls=[];
@@ -357,14 +360,16 @@ function buildTower(){
       const el=document.createElement('div');
       el.className='block '+cat;
       const obj={el,cat,level:l,pos:b,removed:false};
-      const locked=l<BASE||l===LEVELS-1;
+      const locked=l>=LEVELS-TOP_LOCK;
       if(locked){el.classList.add('locked');el.textContent='🔒'}
       else el.textContent={ok:'🟢',bad:'🔴',idea:'💡',wild:'⭐'}[cat];
       el.onclick=()=>pullBlock(obj);
       el.onmouseenter=()=>{
         if(canPull(obj)&&!curBlock&&!state.fallen){
-          el.title='Riesgo de la torre si lo sacas: '+Math.round(Math.min(1.5,calcRisk(obj).risk)*100)+'%';
-        } else if(locked) el.title='Bloque fijo: no se puede mover';
+          const fr=fallRule(obj);
+          el.title=fr?'⚠️ ¡Si lo sacas la torre cae! '+RULE_HINT[fr]
+                     :'Riesgo de la torre si lo sacas: '+Math.round(Math.min(1.5,calcRisk(obj).risk)*100)+'%';
+        } else if(locked) el.title='Bloque fijo: las 3 filas de arriba no se pueden mover';
         else el.title='';
       };
       lv.appendChild(el); row.push(obj);
@@ -375,8 +380,28 @@ function buildTower(){
 
 function canPull(o){
   if(o.removed) return false;
-  if(o.level<BASE||o.level===LEVELS-1) return false;
+  if(o.level>=LEVELS-TOP_LOCK) return false;               // 3 filas de arriba fijas
   return grid[o.level].filter(b=>!b.removed).length>=2;   // no se puede vaciar un nivel
+}
+
+/* Reglas de caída inmediata (como en el Jenga real):
+   centro: ya sacaron el del medio de esa fila y ahora sacan uno de los lados
+   extremos: ya sacaron los 2 extremos de la fila y ahora sacan el del medio
+   columna: queda un hueco en la misma columna en filas contiguas */
+const RULE_HINT={
+  centro:'(a esa fila ya le sacaron el del medio)',
+  extremos:'(a esa fila ya le sacaron los dos extremos)',
+  columna:'(ya falta el bloque de su misma columna en una fila contigua)'
+};
+function fallRule(o){
+  const row=grid[o.level];
+  if(o.pos!==1 && row[1].removed) return 'centro';
+  if(o.pos===1 && row[0].removed && row[2].removed) return 'extremos';
+  for(const dl of [-1,1]){
+    const n=grid[o.level+dl];
+    if(n && n[o.pos].removed) return 'columna';
+  }
+  return null;
 }
 function allPullable(){return grid.flat().filter(canPull)}
 
@@ -472,11 +497,14 @@ function randomBlock(){
 /* ---------- Sacar bloque ---------- */
 function pullBlock(o){
   if(state.fallen||curBlock) return;
-  if(o.level<BASE||o.level===LEVELS-1){ $('diceLabel').textContent='🔒 Ese bloque está fijo (base o cima). Elige otro.'; return; }
+  if(o.level>=LEVELS-TOP_LOCK){ $('diceLabel').textContent='🔒 Las 3 filas de arriba están fijas. Elige otro bloque.'; return; }
   if(!state.rolledCat){ $('diceLabel').textContent='¡Primero tira el dado! 🎲'; return; }
-  if(!canPull(o)){ $('diceLabel').textContent='Ese es el último bloque de su nivel y no se puede sacar.'; return; }
+  if(!canPull(o)){ $('diceLabel').textContent='Ese es el último bloque de su fila y no se puede sacar.'; return; }
   if(!o.el.classList.contains('hint')){ $('diceLabel').textContent='Saca uno de los bloques que parpadean.'; return; }
-  curBlock=o; o.removed=true; o.el.classList.add('pulled'); clearHints();
+  const rule=fallRule(o);
+  o.removed=true; o.el.classList.add('pulled'); clearHints();
+  if(rule){ collapse(rule); return; }          // caída inmediata, sin carta
+  curBlock=o;
   state.counts[o.cat]++; updateScore();
   updateMeter();
   openCard(o.cat);
@@ -546,6 +574,9 @@ const FALL_TEXT={
   desequilibrio:'💥 ¡LA TORRE PERDIÓ EL EQUILIBRIO Y SE CAYÓ!',
   azar:'💥 ¡LA TORRE NO AGUANTÓ EL ÚLTIMO MOVIMIENTO!',
   tambaleos:'💥 ¡DEMASIADOS TAMBALEOS: LA TORRE SE CAYÓ!',
+  centro:'💥 ¡SACARON UN LADO DE UNA FILA SIN EL CENTRO: LA TORRE CAYÓ!',
+  extremos:'💥 ¡SACARON EL CENTRO DE UNA FILA SIN EXTREMOS: LA TORRE CAYÓ!',
+  columna:'💥 ¡DOS HUECOS EN LA MISMA COLUMNA, EN FILAS CONTIGUAS: LA TORRE CAYÓ!',
   sinbloques:'🏁 ¡NO QUEDAN BLOQUES SEGUROS! LA TORRE SE DERRUMBA'
 };
 function collapse(reason){
