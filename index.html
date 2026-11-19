@@ -82,22 +82,18 @@
   #fallmsg{display:none;text-align:center;background:var(--bad);border-radius:12px;padding:14px;margin-bottom:10px}
   #fallmsg.show{display:block}
   .stat{display:flex;justify-content:space-between;font-size:.9rem;padding:2px 0}
-  /* Voting */
-  .vbox{background:var(--panel);border-radius:18px;max-width:720px;width:100%;max-height:92vh;overflow:auto;padding:22px}
-  .vbox h3{margin:0 0 10px}
-  .vtop{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-  .vtop select{width:auto;min-width:160px}
-  .dotsleft{font-size:1.1rem}
-  .dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--wild);margin-right:3px;vertical-align:middle}
-  .dot.empty{background:#12151d;border:2px solid #3a4157}
-  .vrow{display:flex;align-items:center;gap:10px;background:#12151d;border-radius:8px;padding:8px 10px;margin-bottom:8px}
-  .vrow .txt{flex:1;font-size:.95rem}
-  .vrow .mine{min-width:70px;text-align:center}
-  .vrow .total{min-width:90px;text-align:right}
-  .vrow.top{outline:2px solid var(--wild);background:#33301f}
-  .vrow button{padding:4px 12px}
-  .vadd{display:flex;gap:8px;margin-top:10px}
-  .vadd input{flex:1}
+  /* Resumen */
+  .sbox{background:var(--panel);border-radius:18px;max-width:860px;width:100%;max-height:92vh;overflow:auto;padding:22px}
+  .sbox h3{margin:0 0 6px}
+  .sgroup{margin:14px 0;border-radius:10px;overflow:hidden;background:#12151d}
+  .sgroup h4{margin:0;padding:8px 12px;color:#111;font-size:1rem}
+  .sitem{padding:10px 12px;border-bottom:1px solid #2b3144}
+  .sitem:last-child{border-bottom:0}
+  .sitem .sq{font-size:.82rem;color:var(--muted)}
+  .sitem .sa{font-size:1rem;margin:3px 0;white-space:pre-wrap}
+  .sitem .sw{font-size:.8rem;color:var(--wild)}
+  .sempty{padding:10px 12px;color:var(--muted);font-size:.9rem}
+  .card textarea{margin-top:12px;color:#222;background:#f3f3f3;border-color:#ccc;height:90px}
 </style>
 </head>
 <body>
@@ -143,8 +139,8 @@
   <section class="panel">
     <div id="fallmsg">
       <b id="fallTitle">💥 ¡LA TORRE SE HA CAÍDO!</b><br>
-      Es el momento de convertir lo aprendido en un plan de acción.<br>
-      <button class="primary" id="goVote" style="margin-top:8px">🗳 Ir a la votación</button>
+      Es el momento de analizar todo lo que comentó el equipo.<br>
+      <button class="primary" id="goSummary" style="margin-top:8px">📋 Ver resumen</button>
     </div>
     <div class="turn">Turno de: <b id="curName">-</b></div>
     <div class="controls">
@@ -183,19 +179,18 @@
     <div class="stat"><span>🟡 Comodines</span><b id="cWild">0</b></div>
     <h2 style="margin-top:14px">✅ Acciones para el Sprint</h2>
     <ul id="actions"></ul>
-    <p class="small" id="noActions">Las acciones que se anoten al sacar bloques aparecerán aquí.</p>
-    <button class="primary" id="voteBtn" style="width:100%;margin-bottom:6px">🗳 Votación con puntos</button>
-    <button id="copyBtn" style="width:100%;margin-bottom:6px">📋 Copiar acciones</button>
-    <button id="clearBtn" style="width:100%">🗑 Borrar acciones y votos</button>
+    <p class="small" id="noActions">Las acciones que se anoten al responder aparecerán aquí.</p>
+    <button class="primary" id="summaryBtn" style="width:100%;margin-bottom:6px">📋 Ver resumen agrupado</button>
+    <button id="clearBtn" style="width:100%">🗑 Borrar respuestas y acciones</button>
     <h2 style="margin-top:14px">📖 Cómo se juega</h2>
     <ol class="small" style="padding-left:18px;margin:0">
       <li>Quien tenga el turno tira el dado.</li>
       <li>Saca un bloque del color indicado (parpadean).</li>
-      <li>Responde la carta antes de que acabe el tiempo.</li>
-      <li>Si se agota el tiempo, la torre tambalea.</li>
+      <li>Escribe la respuesta de la carta antes de que acabe el tiempo. Solo se puede marcar «Respondido» si hay texto.</li>
+      <li>Si se agota el tiempo sin respuesta, la torre tambalea.</li>
       <li>Si rompes una regla de fila o columna, se cae al instante.</li>
       <li>Si queda muy desequilibrada, también se cae.</li>
-      <li>Al caer, vota las acciones con puntos.</li>
+      <li>Al caer, se muestra el resumen de todo lo comentado, agrupado por tema.</li>
     </ol>
   </section>
 </main>
@@ -210,40 +205,24 @@
     <div class="row">
       <button id="pauseBtn">⏸ Pausar</button>
       <button id="plusBtn">+30 s</button>
-      <button class="primary" id="doneBtn">✔ Respondido</button>
-      <button class="danger" id="skipBtn">⏰ Sin tiempo</button>
+      <button class="primary" id="doneBtn" disabled>✔ Respondido</button>
+      <button class="danger" id="skipBtn">⏭ Pasar sin responder</button>
     </div>
-    <input id="actionInput" placeholder="(Opcional) Escribe una acción concreta que salga de esta carta">
-    <button id="addAction" style="margin-top:8px">➕ Añadir acción</button>
+    <textarea id="answerInput" placeholder="Escribe aquí lo que respondió la persona (obligatorio para marcar «Respondido»)"></textarea>
+    <input id="actionInput" placeholder="(Opcional) Acción concreta que salga de esta carta">
   </div>
 </div>
 
-<!-- Voting modal -->
-<div class="modal" id="voteModal">
-  <div class="vbox">
-    <h3>🗳 Votación con puntos</h3>
-    <p class="small" style="margin-top:0">Votación a ciegas: los totales se ven solo al revelar. Cada persona reparte sus puntos como quiera, incluso todos en una acción.</p>
-    <div class="vtop">
-      <label>Vota:</label>
-      <select id="voterSel"></select>
-      <button id="nextVoter">Siguiente ➡</button>
-      <label>Puntos por persona:</label>
-      <select id="dotsPer" style="width:auto">
-        <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option>
-      </select>
-    </div>
-    <div class="dotsleft" id="dotsLeft"></div>
-    <div class="small" id="voteProgress" style="margin:4px 0 10px"></div>
-    <div id="voteList"></div>
-    <div class="vadd">
-      <input id="voteNewAction" placeholder="Añadir otra acción a votar...">
-      <button id="voteAddBtn">➕</button>
-    </div>
+<!-- Summary modal -->
+<div class="modal" id="summaryModal">
+  <div class="sbox">
+    <h3>📋 Resumen de la retrospectiva</h3>
+    <p class="small" style="margin-top:0" id="sumInfo"></p>
+    <div id="sumBody"></div>
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-      <button class="primary" id="revealBtn">🏆 Revelar resultados</button>
-      <button id="copyVotes">📋 Copiar top 3</button>
-      <button id="resetVotes">↺ Reiniciar votos</button>
-      <button id="closeVote" style="margin-left:auto">Cerrar</button>
+      <button class="primary" id="copySummary">📋 Copiar resumen</button>
+      <button id="downloadSummary">⬇ Descargar .md</button>
+      <button id="closeSummary" style="margin-left:auto">Cerrar</button>
     </div>
   </div>
 </div>
@@ -304,17 +283,17 @@ const TOP_LOCK = 3;  // las 3 filas de arriba están bloqueadas
 const STORE_KEY = 'retroJengaStore';
 
 let state, grid=[], levelEls=[];
-let store = loadStore();       // acciones y votos (persisten al reconstruir la torre)
+let store = loadStore();       // respuestas y acciones (persisten al reconstruir la torre)
+let curCard=null;              // carta abierta: {player,cat,q}
 let timerId=null, timeLeft=0, totalTime=0, paused=false, curBlock=null;
 let sessId=null, sessLeft=3600;
-let voterIdx=0, revealed=false;
 
 const $=id=>document.getElementById(id);
 
 /* ---------- Persistencia ---------- */
 function loadStore(){
-  try{const s=JSON.parse(localStorage.getItem(STORE_KEY));if(s&&Array.isArray(s.actions))return {actions:s.actions,votes:s.votes||{}}}catch(e){}
-  return {actions:[],votes:{}};
+  try{const s=JSON.parse(localStorage.getItem(STORE_KEY));if(s&&Array.isArray(s.actions))return {actions:s.actions,entries:Array.isArray(s.entries)?s.entries:[]}}catch(e){}
+  return {actions:[],entries:[]};
 }
 function saveStore(){try{localStorage.setItem(STORE_KEY,JSON.stringify(store))}catch(e){}}
 
@@ -520,10 +499,13 @@ function pickPrompt(cat){
 }
 
 function openCard(cat){
-  $('cardCat').textContent=CATS[cat].name+' · '+state.players[state.turn%state.players.length];
+  const who=state.players[state.turn%state.players.length];
+  const q=pickPrompt(cat);
+  curCard={player:who,cat,q};
+  $('cardCat').textContent=CATS[cat].name+' · '+who;
   $('card').style.borderTopColor=CATS[cat].color;
-  $('cardQ').textContent=pickPrompt(cat);
-  $('actionInput').value='';
+  $('cardQ').textContent=q;
+  $('actionInput').value=''; $('answerInput').value=''; $('doneBtn').disabled=true;
   totalTime=timeLeft=+$('turnTime').value; paused=false;
   $('pauseBtn').textContent='⏸ Pausar';
   $('modal').classList.add('show');
@@ -535,6 +517,7 @@ function openCard(cat){
     if(timeLeft<=10&&timeLeft>0) beep(800,.05);
     if(timeLeft<=0){ finishTurn(false); }
   },1000);
+  setTimeout(()=>$('answerInput').focus(),50);
 }
 
 function drawTimer(){
@@ -551,6 +534,14 @@ function shakeTower(){
 
 function finishTurn(success){
   clearInterval(timerId);
+  const answer=$('answerInput').value.trim();
+  if(success&&!answer) return;                 // no se puede marcar «Respondido» sin texto
+  if(curCard){
+    store.entries.push({player:curCard.player,cat:curCard.cat,q:curCard.q,answer,answered:success});
+    const act=$('actionInput').value.trim();
+    if(act&&success) store.actions.push(act);
+    saveStore(); renderActions(); curCard=null;
+  }
   $('modal').classList.remove('show');
   curBlock=null; state.rolledCat=null;
   let msg=success?'¡Bien! Siguiente persona, tira el dado.':'⏰ ¡Se acabó el tiempo! Siguiente persona, tira el dado.';
@@ -594,7 +585,7 @@ function collapse(reason){
   $('rollBtn').disabled=true; $('randomBtn').disabled=true;
   $('diceLabel').textContent='💥 Torre caída. ¡A votar las acciones!';
   beep(120,.8);
-  setTimeout(openVote,2200);
+  setTimeout(openSummary,2200);
 }
 
 /* ---------- Sonido ---------- */
@@ -618,81 +609,61 @@ $('sessBtn').onclick=()=>{
   sessId=setInterval(()=>{sessLeft=Math.max(0,sessLeft-1);drawSess();if(sessLeft===0){clearInterval(sessId);beep(440,.6)}},1000);
 };
 
-/* ---------- Votación con puntos ---------- */
-function dotsPer(){return +$('dotsPer').value}
-function usedBy(v){return Object.values(store.votes[v]||{}).reduce((a,b)=>a+b,0)}
-function totalFor(i){return Object.values(store.votes).reduce((a,v)=>a+(v[i]||0),0)}
-
-function openVote(){ revealed=false; renderVote(true); $('voteModal').classList.add('show'); }
-
-function renderVote(rebuildVoters){
-  if(rebuildVoters){
-    const sel=$('voterSel'); sel.innerHTML='';
-    state.players.forEach((p,i)=>{const o=document.createElement('option');o.value=i;o.textContent=p;sel.appendChild(o)});
-    if(voterIdx>=state.players.length) voterIdx=0;
-    sel.value=voterIdx;
-  }
-  const left=dotsPer()-usedBy(voterIdx);
-  const dl=$('dotsLeft'); dl.innerHTML='Puntos disponibles: ';
-  for(let i=0;i<dotsPer();i++){const s=document.createElement('span');s.className='dot'+(i<left?'':' empty');dl.appendChild(s)}
-  const voted=state.players.filter((_,i)=>usedBy(i)>0).length;
-  $('voteProgress').textContent='Han votado '+voted+' de '+state.players.length+' personas.';
-
-  const list=$('voteList'); list.innerHTML='';
-  if(!store.actions.length){ list.innerHTML='<p class="small">Todavía no hay acciones. Añade alguna abajo.</p>'; return; }
-  let order=store.actions.map((a,i)=>i);
-  let topSet=new Set();
-  if(revealed){
-    order.sort((x,y)=>totalFor(y)-totalFor(x));
-    order.filter(i=>totalFor(i)>0).slice(0,3).forEach(i=>topSet.add(i));
-  }
-  order.forEach(i=>{
-    const mine=(store.votes[voterIdx]||{})[i]||0;
-    const row=document.createElement('div'); row.className='vrow'+(topSet.has(i)?' top':'');
-    const txt=document.createElement('div'); txt.className='txt'; txt.textContent=(topSet.has(i)?'🏆 ':'')+store.actions[i];
-    const minus=document.createElement('button'); minus.textContent='−'; minus.disabled=mine<=0||revealed;
-    minus.onclick=()=>vote(i,-1);
-    const m=document.createElement('div'); m.className='mine';
-    for(let k=0;k<mine;k++){const s=document.createElement('span');s.className='dot';m.appendChild(s)}
-    if(!mine) m.textContent='·';
-    const plus=document.createElement('button'); plus.textContent='+'; plus.disabled=left<=0||revealed;
-    plus.onclick=()=>vote(i,1);
-    row.append(txt,minus,m,plus);
-    if(revealed){const t=document.createElement('div');t.className='total';t.innerHTML='<b>'+totalFor(i)+'</b> pts';row.appendChild(t)}
-    list.appendChild(row);
+/* ---------- Resumen agrupado ---------- */
+function buildSummaryData(){
+  const groups=['ok','bad','idea','wild'].map(c=>({cat:c,items:store.entries.filter(e=>e.cat===c&&e.answered)}));
+  const unanswered=store.entries.filter(e=>!e.answered);
+  return {groups,unanswered,total:store.entries.length,answered:store.entries.filter(e=>e.answered).length};
+}
+function openSummary(){
+  const d=buildSummaryData();
+  $('sumInfo').textContent='Cartas jugadas: '+d.total+' · Respondidas: '+d.answered+' · Sin responder: '+d.unanswered.length;
+  const body=$('sumBody'); body.innerHTML='';
+  const addGroup=(title,color,items,render,emptyTxt)=>{
+    const g=document.createElement('div'); g.className='sgroup';
+    const h=document.createElement('h4'); h.style.background=color; h.textContent=title+' ('+items.length+')'; g.appendChild(h);
+    if(!items.length){const e=document.createElement('div');e.className='sempty';e.textContent=emptyTxt;g.appendChild(e)}
+    items.forEach(it=>g.appendChild(render(it)));
+    body.appendChild(g);
+  };
+  const entryEl=it=>{
+    const el=document.createElement('div'); el.className='sitem';
+    const q=document.createElement('div'); q.className='sq'; q.textContent=it.q;
+    const a=document.createElement('div'); a.className='sa'; a.textContent=it.answer||'(sin texto)';
+    const w=document.createElement('div'); w.className='sw'; w.textContent='— '+it.player;
+    el.append(q,a,w); return el;
+  };
+  d.groups.forEach(g=>addGroup(CATS[g.cat].name,CATS[g.cat].color,g.items,entryEl,'Sin respuestas en este grupo.'));
+  addGroup('✅ Acciones propuestas','#cfd6e6',store.actions,t=>{const el=document.createElement('div');el.className='sitem';const a=document.createElement('div');a.className='sa';a.textContent='• '+t;el.appendChild(a);return el},'No se anotaron acciones.');
+  addGroup('⏰ Sin responder (se acabó el tiempo)','#8a93a8',d.unanswered,entryEl,'Todas las cartas fueron respondidas.');
+  $('summaryModal').classList.add('show');
+}
+function summaryText(){
+  const d=buildSummaryData();
+  let t='# Resumen de la retrospectiva\n\nCartas jugadas: '+d.total+' · Respondidas: '+d.answered+' · Sin responder: '+d.unanswered.length+'\n';
+  d.groups.forEach(g=>{
+    t+='\n## '+CATS[g.cat].name+' ('+g.items.length+')\n';
+    if(!g.items.length) t+='_Sin respuestas._\n';
+    g.items.forEach(e=>{t+='\n- **'+e.q+'**\n  '+e.answer.replace(/\n/g,'\n  ')+' _('+e.player+')_\n'});
   });
+  t+='\n## ✅ Acciones propuestas ('+store.actions.length+')\n';
+  if(!store.actions.length) t+='_Ninguna._\n';
+  store.actions.forEach((a,i)=>{t+=(i+1)+'. '+a+'\n'});
+  t+='\n## ⏰ Sin responder ('+d.unanswered.length+')\n';
+  if(!d.unanswered.length) t+='_Ninguna._\n';
+  d.unanswered.forEach(e=>{t+='- '+e.q+' _('+e.player+')_\n'});
+  return t;
 }
-
-function vote(i,delta){
-  const cur=(store.votes[voterIdx]=store.votes[voterIdx]||{});
-  const now=(cur[i]||0)+delta;
-  if(now<0) return;
-  if(delta>0&&usedBy(voterIdx)>=dotsPer()) return;
-  cur[i]=now; if(!now) delete cur[i];
-  saveStore(); renderVote(false);
-}
-
-function topResults(){
-  return store.actions.map((a,i)=>({a,pts:totalFor(i)})).filter(x=>x.pts>0).sort((x,y)=>y.pts-x.pts).slice(0,3);
-}
-
-$('voteBtn').onclick=openVote;
-$('goVote').onclick=openVote;
-$('closeVote').onclick=()=>$('voteModal').classList.remove('show');
-$('voterSel').onchange=e=>{voterIdx=+e.target.value;renderVote(false)};
-$('nextVoter').onclick=()=>{voterIdx=(voterIdx+1)%state.players.length;$('voterSel').value=voterIdx;renderVote(false)};
-$('dotsPer').onchange=()=>renderVote(false);
-$('revealBtn').onclick=()=>{revealed=!revealed;$('revealBtn').textContent=revealed?'🙈 Ocultar resultados':'🏆 Revelar resultados';renderVote(false);if(revealed)beep(660,.3)};
-$('resetVotes').onclick=()=>{if(confirm('¿Reiniciar todos los votos?')){store.votes={};saveStore();revealed=false;renderVote(false)}};
-$('voteAddBtn').onclick=()=>{
-  const v=$('voteNewAction').value.trim();
-  if(v){store.actions.push(v);saveStore();$('voteNewAction').value='';renderActions();renderVote(false)}
+$('summaryBtn').onclick=openSummary;
+$('goSummary').onclick=openSummary;
+$('closeSummary').onclick=()=>$('summaryModal').classList.remove('show');
+$('copySummary').onclick=()=>{
+  navigator.clipboard.writeText(summaryText()).then(()=>{$('copySummary').textContent='✅ Copiado';setTimeout(()=>$('copySummary').textContent='📋 Copiar resumen',1500)});
 };
-$('voteNewAction').addEventListener('keydown',e=>{if(e.key==='Enter')$('voteAddBtn').click()});
-$('copyVotes').onclick=()=>{
-  const r=topResults();
-  const t='Top acciones de la retro:\n'+(r.length?r.map((x,i)=>(i+1)+'. '+x.a+' ('+x.pts+' pts)').join('\n'):'(sin votos)');
-  navigator.clipboard.writeText(t).then(()=>{$('copyVotes').textContent='✅ Copiado';setTimeout(()=>$('copyVotes').textContent='📋 Copiar top 3',1500)});
+$('downloadSummary').onclick=()=>{
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([summaryText()],{type:'text/markdown'}));
+  a.download='resumen-retro.md'; a.click(); URL.revokeObjectURL(a.href);
 };
 
 /* ---------- Eventos generales ---------- */
@@ -702,13 +673,9 @@ $('doneBtn').onclick=()=>finishTurn(true);
 $('skipBtn').onclick=()=>finishTurn(false);
 $('pauseBtn').onclick=()=>{paused=!paused;$('pauseBtn').textContent=paused?'▶ Reanudar':'⏸ Pausar'};
 $('plusBtn').onclick=()=>{timeLeft+=30;totalTime=Math.max(totalTime,timeLeft);drawTimer()};
-$('addAction').onclick=()=>{
-  const v=$('actionInput').value.trim();
-  if(v){store.actions.push(v);saveStore();renderActions();$('actionInput').value=''}
-};
-$('actionInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('addAction').click()});
-$('resetBtn').onclick=()=>{ if(confirm('¿Reconstruir la torre? Se conservan las acciones y los votos.')) init(); };
-$('clearBtn').onclick=()=>{ if(confirm('¿Borrar todas las acciones y votos?')){store={actions:[],votes:{}};saveStore();renderActions();} };
+$('answerInput').addEventListener('input',()=>{$('doneBtn').disabled=!$('answerInput').value.trim()});
+$('resetBtn').onclick=()=>{ if(confirm('¿Reconstruir la torre? Se conservan las respuestas y acciones.')) init(); };
+$('clearBtn').onclick=()=>{ if(confirm('¿Borrar todas las respuestas y acciones?')){store={actions:[],entries:[]};saveStore();renderActions();} };
 $('saveNames').onclick=()=>{
   localStorage.setItem('retroJengaNames',$('namesArea').value);
   state.players=$('namesArea').value.split('\n').map(s=>s.trim()).filter(Boolean);
@@ -717,10 +684,6 @@ $('saveNames').onclick=()=>{
 };
 $('maxWob').onchange=renderWob;
 $('sens').onchange=updateMeter;
-$('copyBtn').onclick=()=>{
-  const t='Acciones de la retro:\n'+store.actions.map((a,i)=>(i+1)+'. '+a).join('\n');
-  navigator.clipboard.writeText(t).then(()=>{$('copyBtn').textContent='✅ Copiado';setTimeout(()=>$('copyBtn').textContent='📋 Copiar acciones',1500)});
-};
 
 drawSess(); init();
 </script>
