@@ -180,13 +180,13 @@
     <h2 style="margin-top:14px">✅ Acciones para el Sprint</h2>
     <ul id="actions"></ul>
     <p class="small" id="noActions">Las acciones que se anoten al responder aparecerán aquí.</p>
-    <button class="primary" id="summaryBtn" style="width:100%;margin-bottom:6px">📋 Ver resumen agrupado</button>
+    <button class="primary" id="summaryBtn" style="width:100%;margin-bottom:6px">🏁 Finalizar y ver resumen</button>
     <button id="clearBtn" style="width:100%">🗑 Borrar respuestas y acciones</button>
     <h2 style="margin-top:14px">📖 Cómo se juega</h2>
     <ol class="small" style="padding-left:18px;margin:0">
       <li>Quien tenga el turno tira el dado.</li>
       <li>Saca un bloque del color indicado (parpadean).</li>
-      <li>Escribe la respuesta de la carta antes de que acabe el tiempo. Solo se puede marcar «Respondido» si hay texto.</li>
+      <li>Escribe la respuesta de la carta antes de que acabe el tiempo. Solo se puede marcar «Respondido» si hay texto real. No hay forma de saltarse la carta: si no hay respuesta, corre el tiempo y la torre tambalea.</li>
       <li>Si se agota el tiempo sin respuesta, la torre tambalea.</li>
       <li>Si rompes una regla de fila o columna, se cae al instante.</li>
       <li>Si queda muy desequilibrada, también se cae.</li>
@@ -206,9 +206,8 @@
       <button id="pauseBtn">⏸ Pausar</button>
       <button id="plusBtn">+30 s</button>
       <button class="primary" id="doneBtn" disabled>✔ Respondido</button>
-      <button class="danger" id="skipBtn">⏭ Pasar sin responder</button>
     </div>
-    <textarea id="answerInput" placeholder="Escribe aquí lo que respondió la persona (obligatorio para marcar «Respondido»)"></textarea>
+    <textarea id="answerInput" placeholder="Escribe aquí lo que respondió la persona (mínimo 3 letras o números para marcar «Respondido»)"></textarea>
     <input id="actionInput" placeholder="(Opcional) Acción concreta que salga de esta carta">
   </div>
 </div>
@@ -532,10 +531,13 @@ function shakeTower(){
   const t=$('tower'); t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake');
 }
 
+function validAnswer(t){return /[\p{L}\p{N}].*[\p{L}\p{N}].*[\p{L}\p{N}]/su.test(t||'')}   // mínimo 3 letras o números
 function finishTurn(success){
-  clearInterval(timerId);
   const answer=$('answerInput').value.trim();
-  if(success&&!answer) return;                 // no se puede marcar «Respondido» sin texto
+  if(success&&!validAnswer(answer)){           // «Respondido» solo con texto real; el tiempo sigue corriendo
+    $('doneBtn').disabled=true; return;
+  }
+  clearInterval(timerId);
   if(curCard){
     store.entries.push({player:curCard.player,cat:curCard.cat,q:curCard.q,answer,answered:success});
     const act=$('actionInput').value.trim();
@@ -606,7 +608,7 @@ function drawSess(){
 $('sessBtn').onclick=()=>{
   if(sessId){clearInterval(sessId);sessId=null;$('sessBtn').textContent='Reanudar';return}
   $('sessBtn').textContent='Pausar';
-  sessId=setInterval(()=>{sessLeft=Math.max(0,sessLeft-1);drawSess();if(sessLeft===0){clearInterval(sessId);beep(440,.6)}},1000);
+  sessId=setInterval(()=>{sessLeft=Math.max(0,sessLeft-1);drawSess();if(sessLeft===0){clearInterval(sessId);sessId=null;beep(440,.6);if(!$('modal').classList.contains('show'))openSummary()}},1000);
 };
 
 /* ---------- Resumen agrupado ---------- */
@@ -615,10 +617,34 @@ function buildSummaryData(){
   const unanswered=store.entries.filter(e=>!e.answered);
   return {groups,unanswered,total:store.entries.length,answered:store.entries.filter(e=>e.answered).length};
 }
+const STOP=new Set('de la el los las un una unos unas y o en a que se es por con para del al lo le les su sus mas pero como muy no si ya me mi mis te nos hay fue ser han sido esta este esto esos esas eso tiene tienen hacer todo todos cada sin sobre entre tambien cuando donde porque estaba estamos'.split(' '));
+function topKeywords(entries,n){
+  const c={};
+  entries.forEach(e=>e.answer.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/[^a-z0-9ñ]+/).forEach(w=>{
+    if(w.length>3&&!STOP.has(w)) c[w]=(c[w]||0)+1;
+  }));
+  return Object.entries(c).filter(x=>x[1]>1).sort((a,b)=>b[1]-a[1]).slice(0,n);
+}
+function overview(d){
+  const ans=store.entries.filter(e=>e.answered);
+  const byP={}; ans.forEach(e=>byP[e.player]=(byP[e.player]||0)+1);
+  const top=Object.entries(byP).sort((a,b)=>b[1]-a[1]);
+  const kw=topKeywords(ans,8);
+  const L=[];
+  L.push('Participaron '+top.length+' personas. '+d.answered+' respuestas de '+d.total+' cartas.');
+  L.push('Por grupo: '+d.groups.map(g=>CATS[g.cat].name.replace(/^\S+\s/,'')+' '+g.items.length).join(' · ')+'.');
+  if(kw.length) L.push('Palabras que más se repiten: '+kw.map(k=>k[0]+' ('+k[1]+')').join(', ')+'.');
+  if(store.actions.length) L.push('Acciones propuestas: '+store.actions.length+'.');
+  return L;
+}
 function openSummary(){
   const d=buildSummaryData();
   $('sumInfo').textContent='Cartas jugadas: '+d.total+' · Respondidas: '+d.answered+' · Sin responder: '+d.unanswered.length;
   const body=$('sumBody'); body.innerHTML='';
+  const ov=document.createElement('div'); ov.className='sgroup';
+  const oh=document.createElement('h4'); oh.style.background='#f2b630'; oh.textContent='🔎 Síntesis'; ov.appendChild(oh);
+  overview(d).forEach(l=>{const e=document.createElement('div');e.className='sitem';e.textContent=l;ov.appendChild(e)});
+  body.appendChild(ov);
   const addGroup=(title,color,items,render,emptyTxt)=>{
     const g=document.createElement('div'); g.className='sgroup';
     const h=document.createElement('h4'); h.style.background=color; h.textContent=title+' ('+items.length+')'; g.appendChild(h);
@@ -641,6 +667,7 @@ function openSummary(){
 function summaryText(){
   const d=buildSummaryData();
   let t='# Resumen de la retrospectiva\n\nCartas jugadas: '+d.total+' · Respondidas: '+d.answered+' · Sin responder: '+d.unanswered.length+'\n';
+  t+='\n## 🔎 Síntesis\n'+overview(d).map(l=>'- '+l).join('\n')+'\n';
   d.groups.forEach(g=>{
     t+='\n## '+CATS[g.cat].name+' ('+g.items.length+')\n';
     if(!g.items.length) t+='_Sin respuestas._\n';
@@ -670,10 +697,9 @@ $('downloadSummary').onclick=()=>{
 $('rollBtn').onclick=rollDice;
 $('randomBtn').onclick=randomBlock;
 $('doneBtn').onclick=()=>finishTurn(true);
-$('skipBtn').onclick=()=>finishTurn(false);
 $('pauseBtn').onclick=()=>{paused=!paused;$('pauseBtn').textContent=paused?'▶ Reanudar':'⏸ Pausar'};
 $('plusBtn').onclick=()=>{timeLeft+=30;totalTime=Math.max(totalTime,timeLeft);drawTimer()};
-$('answerInput').addEventListener('input',()=>{$('doneBtn').disabled=!$('answerInput').value.trim()});
+$('answerInput').addEventListener('input',()=>{$('doneBtn').disabled=!validAnswer($('answerInput').value.trim())});
 $('resetBtn').onclick=()=>{ if(confirm('¿Reconstruir la torre? Se conservan las respuestas y acciones.')) init(); };
 $('clearBtn').onclick=()=>{ if(confirm('¿Borrar todas las respuestas y acciones?')){store={actions:[],entries:[]};saveStore();renderActions();} };
 $('saveNames').onclick=()=>{
