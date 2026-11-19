@@ -92,6 +92,10 @@
   .sitem .sq{font-size:.82rem;color:var(--muted)}
   .sitem .sa{font-size:1rem;margin:3px 0;white-space:pre-wrap}
   .sitem .sw{font-size:.8rem;color:var(--wild)}
+  .sact{display:flex;gap:8px;align-items:flex-start;margin-top:6px;background:#1b2030;border-radius:6px;padding:6px 8px}
+  .sact .at{flex:1;font-size:.9rem}
+  .sact button{padding:4px 10px;white-space:nowrap}
+  .sact.done{opacity:.6}
   .sempty{padding:10px 12px;color:var(--muted);font-size:.9rem}
   .card textarea{margin-top:12px;color:#222;background:#f3f3f3;border-color:#ccc;height:90px}
 </style>
@@ -637,6 +641,79 @@ function overview(d){
   if(store.actions.length) L.push('Acciones propuestas: '+store.actions.length+'.');
   return L;
 }
+/* ---------- Accionables sugeridos (reglas por tema, sin IA) ---------- */
+const THEMES=[
+  {id:'reuniones',name:'Reuniones',rx:/reunion|daily|junta|meeting|planning|refinamiento|retro\b|ceremonia|llamada/,
+   actions:['Dar a cada reunión recurrente una agenda y un objetivo escritos de antemano, y cancelar la que no los tenga.',
+            'Acortar la reunión de menor valor a la mitad del tiempo durante 1 Sprint y comparar.'],
+   metric:'Horas semanales en reuniones por persona (meta: -20%)'},
+  {id:'prioridades',name:'Prioridades y alcance cambiante',rx:/prioridad|prioridades|cambio|cambios|alcance|scope|urgente|urgencia|urgencias|pivot/,
+   actions:['Acordar con el PO que el alcance del Sprint no cambia sin intercambio: si entra algo, sale algo de igual tamaño.',
+            'Definir un único canal para urgencias y una regla para decidir qué es urgente de verdad.'],
+   metric:'Items añadidos a mitad de Sprint (meta: máximo 1)'},
+  {id:'deuda',name:'Deuda técnica y calidad del código',rx:/deuda|tecnica|legacy|refactor|codigo|spaghetti|parche|hack/,
+   actions:['Reservar entre 15% y 20% de la capacidad de cada Sprint para deuda técnica, con ítems priorizados en el backlog.',
+            'Registrar la deuda a medida que aparece y revisarla juntos cada Sprint.'],
+   metric:'Puntos o ítems de deuda cerrados por Sprint'},
+  {id:'informacion',name:'Información, contexto y documentación',rx:/informacion|comunicacion|documentacion|contexto|claridad|enterar|desconoc|no sabia|falta de|silo/,
+   actions:['Documentar las decisiones importantes en un lugar único y breve (una página por decisión).',
+            'Acordar quién avisa a quién y por qué canal cuando cambia algo que afecta a otros.'],
+   metric:'Veces que alguien dijo «no sabía» en la Daily (meta: bajar a cero)'},
+  {id:'bloqueos',name:'Bloqueos y dependencias',rx:/bloqueo|bloqueos|bloque|dependencia|dependencias|esperando|espera|aprobacion|aprobaciones|permiso|acceso|accesos/,
+   actions:['Mostrar los bloqueos en el tablero con fecha de inicio y escalarlos si superan 24 horas.',
+            'Asignar un responsable por cada dependencia externa y revisarlas en la Planning.'],
+   metric:'Horas promedio que un bloqueo tarda en resolverse'},
+  {id:'despliegue',name:'Despliegues, bugs y producción',rx:/deploy|despliegue|despliegues|produccion|release|pipeline|\bci\b|viernes|bug|bugs|error|errores|incidente|incidentes|caida|rollback/,
+   actions:['Acordar no desplegar los viernes ni al final del día, y tener un checklist de release de 5 puntos.',
+            'Hacer un post-mortem breve y sin culpa tras cada incidente, con una mejora concreta como resultado.'],
+   metric:'Incidentes en producción por Sprint y tiempo de resolución'},
+  {id:'requisitos',name:'Requisitos y definición de tareas',rx:/definida|definicion|criterios|aceptacion|requisito|requisitos|historia|historias|ambigu|poco claro|confus|alcance no|refinar/,
+   actions:['Aplicar una Definition of Ready: no entra al Sprint una historia sin criterios de aceptación claros.',
+            'Revisar cada historia importante con negocio, desarrollo y QA juntos antes de la Planning (Three Amigos).'],
+   metric:'Historias devueltas por falta de claridad (meta: 0)'},
+  {id:'interrupciones',name:'Interrupciones y foco',rx:/interrup|slack|correo|correos|mensaje|mensajes|notificacion|soporte|distraccion|foco|concentra/,
+   actions:['Definir bloques de foco sin reuniones ni mensajes (por ejemplo 2 horas cada mañana).',
+            'Rotar semanalmente a una persona como punto de contacto para soporte e interrupciones.'],
+   metric:'Horas de foco continuo por persona a la semana'},
+  {id:'pruebas',name:'Pruebas y QA',rx:/prueba|pruebas|testing|\bqa\b|\btest\b|tests|regresion|cobertura|manual/,
+   actions:['Incluir en la Definition of Done las pruebas automáticas mínimas de cada historia.',
+            'Automatizar primero las 3 pruebas de regresión que más tiempo manual consumen.'],
+   metric:'Bugs encontrados después de dar la historia por terminada'},
+  {id:'capacidad',name:'Carga, estimaciones y plazos',rx:/carga|sobrecarga|capacidad|estimacion|estimaciones|plazo|plazos|tiempo|prisa|presion|horas extra|quemad|agotad/,
+   actions:['Planificar con la capacidad real del equipo (vacaciones y reuniones descontadas) y dejar un colchón de 15%.',
+            'Estimar basándose en el historial de Sprints anteriores y no en la intuición.'],
+   metric:'Porcentaje del Sprint Backlog terminado (meta: más de 85%)'}
+];
+function norm(t){return (t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
+function suggestActions(){
+  const bad=store.entries.filter(e=>e.cat==='bad'&&e.answered);
+  const by={}, other=[];
+  bad.forEach(e=>{
+    let hit=false;
+    const nAns=norm(e.answer);   // el tema se detecta solo en la respuesta, no en la pregunta
+    THEMES.forEach(th=>{ if(th.rx.test(nAns)){ (by[th.id]=by[th.id]||{theme:th,items:[]}).items.push(e); hit=true; } });
+    if(!hit) other.push(e);
+  });
+  const groups=Object.values(by).sort((a,b)=>b.items.length-a.items.length);
+  return {groups,other,total:bad.length};
+}
+function actionText(th,act){return '['+th+'] '+act}
+function suggestionsText(){
+  const sg=suggestActions();
+  let t='\n## 🛠 Accionables sugeridos para «Lo que nos tambalea» ('+sg.total+' respuestas)\n';
+  if(!sg.total) return t+'_Aún no hay respuestas en este grupo._\n';
+  sg.groups.forEach(g=>{
+    t+='\n### '+g.theme.name+' (mencionado '+g.items.length+(g.items.length===1?' vez':' veces')+')\n';
+    g.items.forEach(e=>{t+='- Evidencia: «'+e.answer.replace(/\n/g,' ')+'» _('+e.player+')_\n'});
+    g.theme.actions.forEach(a=>{t+='- [ ] '+a+' — Responsable: ___ · Fecha: ___\n'});
+    t+='- Cómo sabremos que funcionó: '+g.theme.metric+'\n';
+  });
+  if(sg.other.length){
+    t+='\n### Otros temas\n';
+    sg.other.forEach(e=>{t+='- Evidencia: «'+e.answer.replace(/\n/g,' ')+'» _('+e.player+')_\n- [ ] Convertirlo en un experimento de 1 Sprint: qué cambiamos, quién lo lidera y cómo lo medimos — Responsable: ___ · Fecha: ___\n'});
+  }
+  return t;
+}
 function openSummary(){
   const d=buildSummaryData();
   $('sumInfo').textContent='Cartas jugadas: '+d.total+' · Respondidas: '+d.answered+' · Sin responder: '+d.unanswered.length;
@@ -661,6 +738,40 @@ function openSummary(){
   };
   d.groups.forEach(g=>addGroup(CATS[g.cat].name,CATS[g.cat].color,g.items,entryEl,'Sin respuestas en este grupo.'));
   addGroup('✅ Acciones propuestas','#cfd6e6',store.actions,t=>{const el=document.createElement('div');el.className='sitem';const a=document.createElement('div');a.className='sa';a.textContent='• '+t;el.appendChild(a);return el},'No se anotaron acciones.');
+  // Accionables sugeridos
+  const sg=suggestActions();
+  const box=document.createElement('div'); box.className='sgroup';
+  const bh=document.createElement('h4'); bh.style.background='#e5533d'; bh.textContent='🛠 Accionables sugeridos para «Lo que nos tambalea» ('+sg.total+' respuestas)'; box.appendChild(bh);
+  if(!sg.total){const e=document.createElement('div');e.className='sempty';e.textContent='Aún no hay respuestas en «Lo que nos tambalea».';box.appendChild(e)}
+  const mkActRow=(label,full,tmeta)=>{
+    const row=document.createElement('div'); const adopted=store.actions.includes(full);
+    row.className='sact'+(adopted?' done':'');
+    const at=document.createElement('div'); at.className='at'; at.textContent=label;
+    const btn=document.createElement('button'); btn.textContent=adopted?'✔ Adoptada':'➕ Adoptar'; btn.disabled=adopted;
+    btn.onclick=()=>{store.actions.push(full);saveStore();renderActions();openSummary()};
+    row.append(at,btn); return row;
+  };
+  sg.groups.forEach(g=>{
+    const it=document.createElement('div'); it.className='sitem';
+    const tt=document.createElement('div'); tt.className='sa'; tt.innerHTML=''; tt.textContent=g.theme.name+' · mencionado '+g.items.length+(g.items.length===1?' vez':' veces');
+    it.appendChild(tt);
+    g.items.forEach(e=>{const ev=document.createElement('div');ev.className='sq';ev.textContent='«'+e.answer.replace(/\n/g,' ')+'» — '+e.player;it.appendChild(ev)});
+    g.theme.actions.forEach(a=>it.appendChild(mkActRow('▸ '+a,actionText(g.theme.name,a+' · Responsable: ___ · Fecha: ___ · Medir: '+g.theme.metric))));
+    const m=document.createElement('div'); m.className='sw'; m.textContent='Cómo sabremos que funcionó: '+g.theme.metric; it.appendChild(m);
+    box.appendChild(it);
+  });
+  if(sg.other.length){
+    const it=document.createElement('div'); it.className='sitem';
+    const tt=document.createElement('div'); tt.className='sa'; tt.textContent='Otros temas'; it.appendChild(tt);
+    sg.other.forEach(e=>{
+      const ev=document.createElement('div');ev.className='sq';ev.textContent='«'+e.answer.replace(/\n/g,' ')+'» — '+e.player;it.appendChild(ev);
+      const a='Convertirlo en un experimento de 1 Sprint: qué cambiamos, quién lo lidera y cómo lo medimos';
+      it.appendChild(mkActRow('▸ '+a,actionText('Otros','«'+e.answer.replace(/\n/g,' ').slice(0,80)+'» → '+a+' · Responsable: ___ · Fecha: ___')));
+    });
+    box.appendChild(it);
+  }
+  const note=document.createElement('div'); note.className='sempty'; note.textContent='Sugerencias generadas por reglas según palabras de las respuestas (no es IA). Úsalas como punto de partida y ajústalas con el equipo.'; box.appendChild(note);
+  body.appendChild(box);
   addGroup('⏰ Sin responder (se acabó el tiempo)','#8a93a8',d.unanswered,entryEl,'Todas las cartas fueron respondidas.');
   $('summaryModal').classList.add('show');
 }
@@ -676,6 +787,7 @@ function summaryText(){
   t+='\n## ✅ Acciones propuestas ('+store.actions.length+')\n';
   if(!store.actions.length) t+='_Ninguna._\n';
   store.actions.forEach((a,i)=>{t+=(i+1)+'. '+a+'\n'});
+  t+=suggestionsText();
   t+='\n## ⏰ Sin responder ('+d.unanswered.length+')\n';
   if(!d.unanswered.length) t+='_Ninguna._\n';
   d.unanswered.forEach(e=>{t+='- '+e.q+' _('+e.player+')_\n'});
